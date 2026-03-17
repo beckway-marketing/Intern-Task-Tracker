@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Gaby Speas — Intern Task Tracker</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#f0f4f8;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;min-height:100vh;}
+::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:#e0eaf2;}::-webkit-scrollbar-thumb{background:#86bbd8;border-radius:3px;}
+input,select,textarea,button{font-family:inherit;}
+.hdr{background:#044066;padding:24px 24px 0;position:relative;overflow:hidden;}
+.hdr-c1{position:absolute;right:-40px;top:-40px;width:220px;height:220px;border-radius:50%;background:rgba(134,187,216,0.08);pointer-events:none;}
+.hdr-c2{position:absolute;right:60px;top:30px;width:120px;height:120px;border-radius:50%;background:rgba(134,187,216,0.06);pointer-events:none;}
+.tab-btn{background:none;border:none;padding:10px 18px;font-size:12px;font-weight:500;color:#86bbd8;border-bottom:2px solid transparent;cursor:pointer;text-transform:uppercase;letter-spacing:.8px;font-family:inherit;}
+.tab-btn.on{color:#fff;border-bottom:2px solid #f9731a;}
+.stat-card{background:#fff;border-radius:6px;padding:14px 16px;border:1px solid #ddeaf4;}
+.pill{display:inline-block;padding:2px 9px;border-radius:3px;font-size:11px;font-weight:500;white-space:nowrap;}
+.tr{margin-bottom:5px;border-radius:5px;border:1px solid #ddeaf4;background:#fff;overflow:hidden;}
+.th{display:grid;grid-template-columns:1.6fr 1fr .7fr .8fr 1fr .9fr 44px;gap:12px;align-items:center;padding:10px 14px;cursor:pointer;user-select:none;}
+.td{border-top:1px solid #eef4f8;padding:14px 16px 16px;background:#fafcfe;}
+.fg{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px;}
+.fl{display:block;font-size:11px;font-weight:500;color:#0770bb;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px;}
+.fi{width:100%;padding:7px 10px;border:1px solid #d0e0ec;border-radius:5px;font-size:13px;color:#044066;background:#f8fbfe;outline:none;box-sizing:border-box;font-family:inherit;}
+.fi:focus{border-color:#0770bb;}
+.sec-hdr{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.sec-num{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:500;font-size:12px;flex-shrink:0;}
+.ob{border-radius:4px;padding:4px 12px;font-size:11px;font-weight:500;cursor:pointer;font-family:inherit;}
+.fb{padding:3px 10px;border-radius:3px;cursor:pointer;border:1px solid #d0e0ec;background:#fff;color:#5a7a99;font-size:11px;font-weight:500;font-family:inherit;}
+.sc{background:#fff;border-radius:6px;border:1px solid #ddeaf4;overflow:hidden;margin-bottom:14px;}
+.sc-hdr{padding:12px 18px;border-bottom:1px solid #eef4f8;display:flex;align-items:center;gap:10px;}
+.dz{border:2px dashed #86bbd8;border-radius:8px;padding:24px 20px;text-align:center;background:#f8fbfe;cursor:pointer;margin-bottom:14px;}
+.rc{background:#fff;border:1px solid #d0e0ec;border-radius:8px;padding:14px;position:relative;}
+.del-btn{background:#fff0e8;border:1px solid #f9731a;color:#7a2e00;border-radius:4px;padding:4px 10px;font-size:11px;font-weight:500;cursor:pointer;font-family:inherit;}
+.del-btn:hover{background:#ffe0cc;}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+// ── Supabase ─────────────────────────────────────────────────────
+const SB_URL="https://rxmttzodgwfkryibcyhw.supabase.co";
+const SB_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4bXR0em9kZ3dma3J5aWJjeWh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3NzAwOTgsImV4cCI6MjA4OTM0NjA5OH0.8u8LyK3-Fuc6i7VQb6qH9L1xl4L8WitcIVPd4LI67Yo";
+const HDR={"apikey":SB_KEY,"Authorization":"Bearer "+SB_KEY,"Content-Type":"application/json","Prefer":"resolution=merge-duplicates"};
+
+async function dbLoad(){
+  try{
+    const r=await fetch(SB_URL+"/rest/v1/tracker_data?id=eq.main&select=all_weeks,resources",{
+      headers:{"apikey":SB_KEY,"Authorization":"Bearer "+SB_KEY}
+    });
+    if(!r.ok){console.error("Load error",r.status,await r.text());return null;}
+    const d=await r.json();
+    return d[0]||null;
+  }catch(e){console.error("Load failed",e);return null;}
+}
+
+async function dbSave(all_weeks,resources){
+  try{
+    // Use upsert — works whether row exists or not
+    const r=await fetch(SB_URL+"/rest/v1/tracker_data",{
+      method:"POST",
+      headers:{...HDR,"Prefer":"resolution=merge-duplicates,return=minimal"},
+      body:JSON.stringify({id:"main",all_weeks,resources,updated_at:new Date().toISOString()})
+    });
+    if(!r.ok){
+      const txt=await r.text();
+      console.error("Save error",r.status,txt);
+      ST.sync="error"; badge();
+    }
+  }catch(e){console.error("Save failed",e);ST.sync="error";badge();}
+}
+
+// ── Constants ────────────────────────────────────────────────────
+const AREAS=["Marketing","Business Development","Social Media","Offsites"];
+const AC={"Marketing":{c:"#f9731a",lt:"#fff4ec",bd:"#f9731a",tx:"#7a2e00"},"Business Development":{c:"#044066",lt:"#e6f0f8",bd:"#044066",tx:"#044066"},"Social Media":{c:"#0770bb",lt:"#eaf4fc",bd:"#0770bb",tx:"#034f8a"},"Offsites":{c:"#2fa878",lt:"#eafaf4",bd:"#2fa878",tx:"#1a6b4a"}};
+const SC={"Not Started":{bg:"#f0f4f8",tx:"#4a6a8a",bd:"#b0c8d8"},"In Progress":{bg:"#e6f0f8",tx:"#044066",bd:"#86bbd8"},"Blocked":{bg:"#fff0e8",tx:"#7a2e00",bd:"#f9731a"},"Review":{bg:"#fffbe6",tx:"#6a5000",bd:"#ffc533"},"Done":{bg:"#eafaf4",tx:"#1a6b4a",bd:"#2fa878"}};
+const PC={"Low":{bg:"#f0f8fd",tx:"#2a5a7a",bd:"#86bbd8"},"Medium":{bg:"#fffbe6",tx:"#6a5000",bd:"#ffc533"},"High":{bg:"#fff0e8",tx:"#7a2e00",bd:"#f9731a"}};
+const SO=["Not Started","In Progress","Blocked","Review","Done"];
+const PO=["Low","Medium","High"];
+const DAYS=["Mon","Tue","Wed","Thu","Fri"];
+const EH=()=>({Mon:"",Tue:"",Wed:"",Thu:"",Fri:""});
+const EW=()=>Object.fromEntries(AREAS.map(a=>[a,[]]));
+
+function wkLabel(o){const b=new Date("2026-03-16");b.setDate(b.getDate()+o*7);const e=new Date(b);e.setDate(e.getDate()+4);const f=d=>d.toLocaleDateString("en-US",{month:"short",day:"numeric"});return f(b)+" \u2013 "+f(e);}
+function wkDates(o){return DAYS.map((_,i)=>{const d=new Date("2026-03-16");d.setDate(d.getDate()+o*7+i);return d.toLocaleDateString("en-US",{month:"short",day:"numeric"});});}
+
+// ── State ────────────────────────────────────────────────────────
+let ST={weekOff:0,allWeeks:{"0":EW()},resources:[],tab:"tasks",fArea:"All",fStatus:"All",addIn:null,openT:{},confirmDel:null,sync:"loading"};
+let saveTimer=null;
+
+function queueSave(){
+  ST.sync="saving"; badge();
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(async()=>{
+    await dbSave(ST.allWeeks,ST.resources);
+    if(ST.sync!=="error"){ST.sync="saved"; badge();}
+  },1000);
+}
+
+function badge(){
+  const el=document.getElementById("sb");
+  if(!el)return;
+  const m={
+    loading:["#86bbd8","Loading data..."],
+    saving:["#ffc533","Saving..."],
+    saved:["#2fa878","\u2713 Saved \u2014 live for all users"],
+    error:["#f9731a","\u26a0 Save error \u2014 check console"]
+  };
+  const[color,text]=m[ST.sync]||m.saved;
+  el.innerHTML=`<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color};margin-right:5px;vertical-align:middle;"></span>${text}`;
+  el.style.color=color;
+}
+
+const pill=(l,c)=>`<span class="pill" style="background:${c.bg};color:${c.tx};border:1px solid ${c.bd};">${l}</span>`;
+const opts=(arr,v)=>arr.map(o=>`<option${o===v?" selected":""}>${o}</option>`).join("");
+const esc=s=>(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
+
+function tbar(actual,est){
+  if(!est||est<=0)return"";
+  const pct=Math.min((actual/est)*100,100),over=actual>est;
+  const col=over?"#f9731a":actual>=est*0.8?"#ffc533":"#2fa878";
+  const lbl=over?`+${(actual-est).toFixed(1)}h over`:`${(est-actual).toFixed(1)}h remaining`;
+  return`<div style="margin-top:6px;"><div style="display:flex;justify-content:space-between;font-size:10px;color:#5a7a99;margin-bottom:3px;"><span>${actual}h logged / ${est}h estimated</span><span style="color:${col};font-weight:500;">${lbl}</span></div><div style="background:#e6f0f8;border-radius:3px;height:6px;overflow:hidden;"><div style="background:${col};width:${pct}%;height:100%;border-radius:3px;"></div></div></div>`;
+}
+
+function trows(area){
+  const wk=ST.allWeeks[String(ST.weekOff)]||EW();
+  const tasks=(wk[area]||[]).filter(t=>(ST.fArea==="All"||t.area===ST.fArea)&&(ST.fStatus==="All"||t.status===ST.fStatus));
+  if(!tasks.length&&ST.addIn!==area)return`<div style="background:#fff;border:1px dashed #d0e0ec;border-radius:5px;padding:16px;text-align:center;color:#b0c8d8;font-size:13px;font-style:italic;border-left:4px solid ${AC[area].c};">No tasks yet \u2014 hit + Add to get started</div>`;
+  return tasks.map(t=>{
+    const a=AC[t.area],sc=SC[t.status],pc=PC[t.priority];
+    const actual=parseFloat(t.actualHours)||Object.values(t.hours||{}).reduce((s,v)=>s+(parseFloat(v)||0),0);
+    const est=parseFloat(t.estimatedHours)||0;
+    const open=ST.openT[t.id],isCon=ST.confirmDel==t.id;
+    const det=open?`<div class="td">
+      <div class="fg">
+        <label class="fl">Status<select class="fi" data-tid="${t.id}" data-f="status" style="margin-top:3px;cursor:pointer;">${opts(SO,t.status)}</select></label>
+        <label class="fl">Priority<select class="fi" data-tid="${t.id}" data-f="priority" style="margin-top:3px;cursor:pointer;">${opts(PO,t.priority)}</select></label>
+        <label class="fl">Owner<input class="fi" data-tid="${t.id}" data-f="owner" value="${esc(t.owner)}" style="margin-top:3px;" placeholder="Assign to..."></label>
+        <label class="fl">Area<select class="fi" data-tid="${t.id}" data-f="area" style="margin-top:3px;cursor:pointer;">${opts(AREAS,t.area)}</select></label>
+        <label class="fl">Date assigned<input type="date" class="fi" data-tid="${t.id}" data-f="dateAssigned" value="${t.dateAssigned||""}" style="margin-top:3px;"></label>
+        <label class="fl">Due date<input type="date" class="fi" data-tid="${t.id}" data-f="dateDue" value="${t.dateDue||""}" style="margin-top:3px;"></label>
+        <label class="fl">Resources<input class="fi" data-tid="${t.id}" data-f="resources" value="${esc(t.resources)}" style="margin-top:3px;" placeholder="Link, doc..."></label>
+        <label class="fl">Weekly repeat<div style="display:flex;align-items:center;gap:7px;margin-top:10px;"><input type="checkbox" data-tid="${t.id}" data-f="weeklyRepeat" ${t.weeklyRepeat?"checked":""} style="width:14px;height:14px;accent-color:#0770bb;"><span style="font-size:12px;color:#5a7a99;font-weight:400;text-transform:none;letter-spacing:0;">${t.weeklyRepeat?"Repeats weekly":"One-time"}</span></div></label>
+      </div>
+      <label class="fl" style="display:block;margin-bottom:12px;">Notes<textarea class="fi" data-tid="${t.id}" data-f="notes" rows="2" style="margin-top:3px;resize:vertical;" placeholder="Blockers, context...">${esc(t.notes)}</textarea></label>
+      <div style="background:#f0f8ff;border:1px solid #86bbd8;border-radius:6px;padding:14px;margin-bottom:14px;">
+        <div style="font-size:11px;font-weight:500;color:#0770bb;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Time Tracking</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
+          <label class="fl">Estimated hours<input type="number" class="fi" data-tid="${t.id}" data-f="estimatedHours" min="0" step="0.5" value="${t.estimatedHours||""}" style="margin-top:3px;" placeholder="e.g. 4"></label>
+          <label class="fl">Actual hours<input type="number" class="fi" data-tid="${t.id}" data-f="actualHours" min="0" step="0.5" value="${t.actualHours||""}" style="margin-top:3px;" placeholder="or log daily below"></label>
+        </div>
+        ${est>0?tbar(actual,est):""}
+      </div>
+      <div style="font-size:11px;font-weight:500;color:#86bbd8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Daily hours this week</div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px;">${DAYS.map((day,i)=>`<label class="fl">${day} <span style="font-size:10px;font-weight:400;text-transform:none;color:#b0c8d8;">${wkDates(ST.weekOff)[i]}</span><input type="number" class="fi" min="0" max="8" step="0.5" data-tid="${t.id}" data-f="hours_${day}" value="${(t.hours||{})[day]||""}" style="margin-top:3px;text-align:center;" placeholder="0"></label>`).join("")}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding-top:10px;border-top:1px solid #eef4f8;">
+        <div style="font-size:12px;color:#5a7a99;">Daily total: <span style="font-weight:500;color:${a.c};">${actual}h</span>${est>0?` / ${est}h est`:""}</div>
+        ${isCon
+          ?`<div style="display:flex;align-items:center;gap:8px;"><span style="font-size:12px;color:#7a2e00;font-weight:500;">Delete this task?</span><button data-dno="${t.id}" style="background:none;border:1px solid #d0e0ec;border-radius:4px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit;">No</button><button data-dyes="${t.id}" style="background:#f9731a;color:#fff;border:none;border-radius:4px;padding:4px 12px;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;">Yes, delete</button></div>`
+          :`<button class="del-btn" data-del="${t.id}">&#128465; Delete task</button>`}
+      </div>
+    </div>`:"";
+    return`<div class="tr" style="border-left:4px solid ${a.c};"><div class="th" data-tog="${t.id}">
+      <div style="font-weight:500;font-size:13px;color:#1a2e40;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.title)}</div>
+      ${pill(t.status,sc)}${pill(t.priority,pc)}
+      <div style="font-size:12px;color:#5a7a99;">${esc(t.owner)||"\u2014"}</div>
+      <div style="font-size:12px;color:${t.dateDue?"#5a7a99":"#b0c8d8"};">${t.dateDue||"No due date"}</div>
+      <div style="font-size:12px;"><span style="font-weight:500;color:${actual>0?a.c:"#b0c8d8"};">${actual>0?actual+"h":"\u2014"}</span>${est>0?`<span style="color:#b0c8d8;font-size:11px;"> / ${est}h est</span>`:""}${actual>0&&est>0?`<span style="font-size:10px;margin-left:4px;font-weight:500;color:${actual>est?"#f9731a":"#2fa878"};">${actual>est?"\u25b2":"\u2713"}</span>`:""}${t.weeklyRepeat?`<span style="margin-left:3px;font-size:10px;color:#86bbd8;">\u21bb</span>`:""}</div>
+      <div style="font-size:11px;color:#b0c8d8;text-align:right;">${open?"\u25b2":"\u25bc"}</div>
+    </div>${det}</div>`;
+  }).join("");
+}
+
+function addForm(area){
+  const a=AC[area];
+  return`<div style="background:#f5f8fc;border:1px solid ${a.bd};border-radius:6px;padding:16px;margin-bottom:10px;border-left:4px solid ${a.c};">
+    <div style="font-size:13px;font-weight:500;color:#1a2e40;margin-bottom:12px;">New task \u2014 ${area}</div>
+    <div style="margin-bottom:10px;"><label class="fl">Task title<input class="fi" id="nt" style="margin-top:3px;" placeholder="What needs to get done?" autocomplete="off"></label></div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:10px;">
+      <label class="fl">Status<select class="fi" id="ns" style="margin-top:3px;cursor:pointer;">${opts(SO,"Not Started")}</select></label>
+      <label class="fl">Priority<select class="fi" id="np" style="margin-top:3px;cursor:pointer;">${opts(PO,"Medium")}</select></label>
+      <label class="fl">Owner<input class="fi" id="no" value="Gaby Speas" style="margin-top:3px;"></label>
+      <label class="fl">Est. hours<input type="number" class="fi" id="ne" min="0" step="0.5" style="margin-top:3px;" placeholder="e.g. 3"></label>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+      <label class="fl">Date assigned<input type="date" class="fi" id="nda" value="2026-03-16" style="margin-top:3px;"></label>
+      <label class="fl">Due date<input type="date" class="fi" id="ndd" style="margin-top:3px;"></label>
+      <label class="fl">Resources<input class="fi" id="nr" style="margin-top:3px;" placeholder="Link, doc..."></label>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:8px 10px;background:#fff;border-radius:5px;border:1px solid #d0e0ec;">
+      <input type="checkbox" id="nrep" style="width:14px;height:14px;accent-color:#0770bb;">
+      <span style="font-size:13px;color:#1a2e40;">Repeat every week</span>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button id="can" style="background:none;border:1px solid #d0e0ec;border-radius:4px;padding:7px 16px;font-size:13px;cursor:pointer;color:#5a7a99;">Cancel</button>
+      <button id="conf" style="background:#f9731a;color:#fff;border:none;border-radius:4px;padding:7px 18px;font-size:13px;font-weight:500;cursor:pointer;">Add task</button>
+    </div>
+  </div>`;
+}
+
+function sumHtml(){
+  const wk=ST.allWeeks[String(ST.weekOff)]||EW();
+  const tasks=AREAS.flatMap(a=>wk[a]||[]);
+  const ta=tasks.reduce((s,t)=>{const a=parseFloat(t.actualHours)||Object.values(t.hours||{}).reduce((h,v)=>h+(parseFloat(v)||0),0);return s+a;},0);
+  const te=tasks.reduce((s,t)=>s+(parseFloat(t.estimatedHours)||0),0);
+  const vr=te>0?ta-te:null;
+  const cn=SO.reduce((a,s)=>({...a,[s]:tasks.filter(t=>t.status===s).length}),{});
+  const wd=wkDates(ST.weekOff);
+  return`<div style="font-weight:500;font-size:15px;color:#1a2e40;margin-bottom:14px;">${wkLabel(ST.weekOff)} \u2014 Weekly summary</div>
+  <div class="sc"><div class="sc-hdr"><div class="sec-num" style="background:#044066;">1</div><div style="font-weight:500;font-size:13px;color:#1a2e40;">Hours by day</div></div><div style="height:2px;background:#f9731a;"></div><div style="padding:16px 18px;">
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;">${DAYS.map((day,i)=>{const dh=tasks.reduce((s,t)=>s+(parseFloat((t.hours||{})[day])||0),0);return`<div style="text-align:center;background:#f0f4f8;border-radius:5px;padding:12px 4px;border-top:3px solid ${dh>0?"#0770bb":"#d0e0ec"};"><div style="font-size:10px;font-weight:500;color:#5a7a99;text-transform:uppercase;letter-spacing:.8px;">${day}</div><div style="font-size:10px;color:#b0c8d8;margin-bottom:6px;">${wd[i]}</div><div style="font-size:24px;font-weight:500;color:${dh>0?"#044066":"#c0d4e4"};">${dh>0?dh:"\u2014"}</div>${dh>0?`<div style="font-size:10px;font-weight:500;color:#f9731a;">hrs</div>`:""}</div>`;}).join("")}</div>
+    <div style="margin-top:12px;padding:9px 14px;background:#e6f0f8;border-radius:5px;font-weight:500;color:#044066;font-size:13px;border:1px solid #86bbd8;">Total logged: <span style="color:#f9731a;">${ta}h</span>${te>0?` &nbsp;&middot;&nbsp; Estimated: <span style="color:#0770bb;">${te}h</span> &nbsp;&middot;&nbsp; Variance: <span style="color:${vr>0?"#f9731a":vr<0?"#2fa878":"#044066"};font-weight:500;">${vr>0?"+":""}${vr!==null?vr.toFixed(1)+"h":"\u2014"}</span>`:""}</div>
+  </div></div>
+  <div class="sc"><div class="sc-hdr"><div class="sec-num" style="background:#044066;">2</div><div style="font-weight:500;font-size:13px;color:#1a2e40;">Time tracking \u2014 actual vs estimated</div></div><div style="height:2px;background:#f9731a;"></div><div style="padding:16px 18px;">
+    ${tasks.filter(t=>parseFloat(t.estimatedHours)>0).length===0
+      ?`<div style="color:#b0c8d8;font-size:13px;font-style:italic;text-align:center;padding:12px;">No estimates set yet \u2014 add estimated hours to tasks to see comparisons</div>`
+      :tasks.filter(t=>parseFloat(t.estimatedHours)>0).map(t=>{
+        const actual=parseFloat(t.actualHours)||Object.values(t.hours||{}).reduce((h,v)=>h+(parseFloat(v)||0),0);
+        const est=parseFloat(t.estimatedHours),pct=Math.min((actual/est)*100,100),over=actual>est;
+        const col=over?"#f9731a":actual>=est*0.8?"#ffc533":"#2fa878";
+        const a=AC[t.area];
+        return`<div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #eef4f8;"><div style="display:flex;justify-content:space-between;margin-bottom:6px;"><div><span style="font-size:13px;font-weight:500;color:#1a2e40;">${esc(t.title)}</span><span style="margin-left:8px;display:inline-block;width:8px;height:8px;border-radius:2px;background:${a.c};vertical-align:middle;"></span><span style="font-size:11px;color:#86bbd8;margin-left:4px;">${t.area}</span></div><div style="font-size:12px;font-weight:500;color:${col};white-space:nowrap;margin-left:12px;">${actual}h / ${est}h${over?` (+${(actual-est).toFixed(1)}h over)`:""}</div></div><div style="background:#e6f0f8;border-radius:3px;height:8px;overflow:hidden;"><div style="background:${col};width:${pct}%;height:100%;border-radius:3px;"></div></div></div>`;
+      }).join("")}
+  </div></div>
+  <div class="sc"><div class="sc-hdr"><div class="sec-num" style="background:#044066;">3</div><div style="font-weight:500;font-size:13px;color:#1a2e40;">Hours by area</div></div><div style="height:2px;background:#f9731a;"></div><div style="padding:16px 18px;">${AREAS.map(area=>{const a=AC[area];const ah=(wk[area]||[]).reduce((s,t)=>{const h=parseFloat(t.actualHours)||Object.values(t.hours||{}).reduce((h,v)=>h+(parseFloat(v)||0),0);return s+h;},0);const eh=(wk[area]||[]).reduce((s,t)=>s+(parseFloat(t.estimatedHours)||0),0);const pct=ta>0?(ah/ta)*100:0;return`<div style="margin-bottom:14px;"><div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="font-size:12px;font-weight:500;color:${a.tx};display:flex;align-items:center;gap:6px;"><span style="width:9px;height:9px;border-radius:2px;background:${a.c};display:inline-block;"></span>${area}</span><span style="font-size:12px;font-weight:500;color:#1a2e40;">${ah}h${eh>0?` / ${eh}h est`:""}</span></div><div style="background:#e6f0f8;border-radius:3px;height:7px;"><div style="background:${a.c};width:${pct}%;height:100%;border-radius:3px;"></div></div></div>`;}).join("")}</div></div>
+  <div class="sc"><div class="sc-hdr"><div class="sec-num" style="background:#044066;">4</div><div style="font-weight:500;font-size:13px;color:#1a2e40;">Status breakdown</div></div><div style="height:2px;background:#f9731a;"></div><div style="padding:16px 18px;display:grid;grid-template-columns:repeat(5,1fr);gap:8px;">${SO.map(s=>{const sc=SC[s];return`<div style="background:${sc.bg};border:1px solid ${sc.bd};border-top:2px solid ${sc.bd};border-radius:5px;padding:12px 6px;text-align:center;"><div style="font-size:24px;font-weight:500;color:${sc.tx};">${cn[s]}</div><div style="font-size:10px;font-weight:500;color:${sc.tx};text-transform:uppercase;letter-spacing:.5px;margin-top:2px;">${s}</div></div>`;}).join("")}</div></div>`;
+}
+
+function resHtml(){
+  const res=ST.resources;
+  const cards=res.length===0?`<div style="text-align:center;padding:40px;color:#b0c8d8;font-size:13px;font-style:italic;">No resources yet \u2014 upload files or add links above</div>`:
+    `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">${res.map(r=>`<div class="rc"><button data-dres="${r.id}" style="position:absolute;top:8px;right:8px;background:none;border:none;font-size:13px;cursor:pointer;color:#b0c8d8;">&#x2715;</button><div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;"><div style="width:36px;height:36px;border-radius:5px;background:#e6f0f8;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;color:#044066;flex-shrink:0;">${r.type==="link"?"LINK":((r.name.split(".").pop()||"").toUpperCase().slice(0,4)||"FILE")}</div><div style="min-width:0;"><div style="font-weight:500;font-size:13px;color:#1a2e40;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:20px;">${esc(r.name)}</div><div style="font-size:11px;color:#b0c8d8;margin-top:2px;">Added ${r.uploadedAt}</div></div></div><input class="fi rn" data-rid="${r.id}" value="${esc(r.note)}" placeholder="Add a note..." style="font-size:12px;padding:5px 8px;margin-bottom:8px;"><select class="fi ra" data-rid="${r.id}" style="font-size:12px;padding:4px 8px;cursor:pointer;margin-bottom:8px;">${["All",...AREAS].map(a=>`<option${a===r.area?" selected":""}>${a}</option>`).join("")}</select><a href="${r.url}" target="_blank" style="display:block;background:#044066;color:#fff;border-radius:4px;padding:6px 10px;font-size:12px;font-weight:500;text-decoration:none;text-align:center;">${r.type==="link"?"Open link":"Open / download"}</a></div>`).join("")}</div>`;
+  return`<div class="dz" id="dz"><div style="font-size:13px;font-weight:500;color:#044066;margin-bottom:3px;">Drop files here or click to upload</div><div style="font-size:12px;color:#6699bb;">PDFs, Word docs, spreadsheets, images</div></div><input type="file" id="fi" multiple style="display:none;"><div style="margin-bottom:16px;" id="ls"><button id="alb" style="background:#e6f0f8;border:1px solid #86bbd8;color:#0770bb;border-radius:4px;padding:7px 16px;font-size:13px;font-weight:500;cursor:pointer;">+ Add a link</button></div>${cards}`;
+}
+
+function filHtml(){
+  const af=["All",...AREAS].map(a=>{const ac=AC[a],sel=ST.fArea===a;const st=sel&&ac?`border-color:${ac.bd};background:${ac.lt};color:${ac.tx};`:`border-color:${sel?"#044066":"#d0e0ec"};background:${sel?"#e6f0f8":"#fff"};color:${sel?"#044066":"#5a7a99"};`;return`<button class="fb" data-fa="${a}" style="${st}">${a}</button>`;}).join("");
+  const sf=["All",...SO].map(s=>{const sc=SC[s],sel=ST.fStatus===s;const st=sel&&sc?`border-color:${sc.bd};background:${sc.bg};color:${sc.tx};`:`border-color:${sel?"#5a7a99":"#d0e0ec"};background:${sel?"#e6f0f8":"#fff"};color:${sel?"#044066":"#5a7a99"};`;return`<button class="fb" data-fs="${s}" style="${st}">${s}</button>`;}).join("");
+  return`<div style="display:flex;gap:5px;margin-bottom:14px;flex-wrap:wrap;align-items:center;"><span style="font-size:10px;font-weight:500;color:#86bbd8;text-transform:uppercase;letter-spacing:1px;">Area:</span>${af}<span style="font-size:10px;font-weight:500;color:#86bbd8;text-transform:uppercase;letter-spacing:1px;margin-left:8px;">Status:</span>${sf}</div>`;
+}
+
+function render(){
+  const tasks=AREAS.flatMap(a=>(ST.allWeeks[String(ST.weekOff)]||EW())[a]||[]);
+  const ta=tasks.reduce((s,t)=>{const a=parseFloat(t.actualHours)||Object.values(t.hours||{}).reduce((h,v)=>h+(parseFloat(v)||0),0);return s+a;},0);
+  const te=tasks.reduce((s,t)=>s+(parseFloat(t.estimatedHours)||0),0);
+  const cn=SO.reduce((a,s)=>({...a,[s]:tasks.filter(t=>t.status===s).length}),{});
+  const stats=[{l:"Total tasks",v:tasks.length,acc:"#044066"},{l:"In progress",v:cn["In Progress"],acc:"#0770bb"},{l:"Done",v:cn["Done"],acc:"#2fa878"},{l:"Blocked",v:cn["Blocked"],acc:"#f9731a"},{l:"Hours logged",v:ta+"h"+(te>0?" / "+te+"h est":""),acc:"#ffa343"}];
+
+  let body="";
+  if(ST.tab==="tasks"){
+    body=filHtml()+`<div style="display:grid;grid-template-columns:1.6fr 1fr .7fr .8fr 1fr .9fr 44px;gap:12px;padding:4px 18px;font-size:10px;font-weight:500;color:#86bbd8;text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px;"><div>Task</div><div>Status</div><div>Priority</div><div>Owner</div><div>Due date</div><div>Actual / Est.</div><div></div></div>`+
+    AREAS.filter(a=>ST.fArea==="All"||ST.fArea===a).map((area,i)=>{
+      const a=AC[area];
+      return`<div style="margin-bottom:24px;"><div class="sec-hdr"><div class="sec-num" style="background:${a.c};">${i+1}</div><div style="flex:1;"><div style="font-weight:500;font-size:14px;color:#1a2e40;">${area}</div><div style="height:2px;background:${a.c};border-radius:1px;margin-top:3px;"></div></div><button class="ob" data-add="${area}" style="background:${a.lt};border:1px solid ${a.bd};color:${a.tx};">+ Add</button></div>${ST.addIn===area?addForm(area):""}${trows(area)}</div>`;
+    }).join("");
+  }else if(ST.tab==="summary"){body=sumHtml();}
+  else{body=resHtml();}
+
+  document.getElementById("app").innerHTML=`
+    <div class="hdr"><div class="hdr-c1"></div><div class="hdr-c2"></div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div style="color:#86bbd8;font-size:11px;font-weight:500;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;">Beckway</div>
+          <div style="font-size:22px;font-weight:500;color:#fff;margin-bottom:5px;">Intern task tracker \u2014 <span style="color:#f9731a;">Gaby Speas</span></div>
+          <div style="font-size:12px;color:#86bbd8;margin-bottom:3px;">Weekly task management and hour tracking.</div>
+          <div style="font-size:10px;font-weight:500;color:#4a7a99;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:18px;">First day: Monday, March 16, 2026</div>
+        </div>
+        <div style="text-align:right;padding-top:4px;">
+          <div id="sb" style="font-size:11px;font-weight:500;display:flex;align-items:center;gap:4px;justify-content:flex-end;margin-bottom:8px;"></div>
+          <button id="rfr" style="background:rgba(255,255,255,0.1);border:1px solid rgba(134,187,216,0.3);color:#86bbd8;border-radius:4px;padding:4px 12px;font-size:11px;cursor:pointer;">&#8635; Refresh</button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;background:rgba(255,255,255,.1);border-radius:5px;overflow:hidden;">
+          <button id="pw" style="background:none;border:none;color:#86bbd8;font-size:18px;cursor:pointer;padding:7px 12px;line-height:1;">\u2039</button>
+          <div style="padding:7px 14px;border-left:1px solid rgba(134,187,216,.2);border-right:1px solid rgba(134,187,216,.2);">
+            <div style="color:#fff;font-size:13px;font-weight:500;white-space:nowrap;">${wkLabel(ST.weekOff)}</div>
+            <div style="color:#86bbd8;font-size:10px;text-align:center;">Week ${ST.weekOff+1}</div>
+          </div>
+          <button id="nw" style="background:none;border:none;color:#86bbd8;font-size:18px;cursor:pointer;padding:7px 12px;line-height:1;">\u203a</button>
+        </div>
+        <button id="ga" style="background:#f9731a;color:#fff;border:none;border-radius:4px;padding:8px 16px;font-size:13px;font-weight:500;cursor:pointer;">+ Add task</button>
+      </div>
+      <div style="display:flex;">${[["tasks","Task list"],["summary","Weekly summary"],["resources","Resources"]].map(([t,l])=>`<button class="tab-btn${ST.tab===t?" on":""}" data-tab="${t}">${l}</button>`).join("")}</div>
+    </div>
+    <div style="padding:20px 24px;max-width:1300px;margin:0 auto;">
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px;">${stats.map(s=>`<div class="stat-card" style="border-top:3px solid ${s.acc};"><div style="font-size:22px;font-weight:500;color:#1a2e40;line-height:1.1;">${s.v}</div><div style="font-size:10px;font-weight:500;color:#86bbd8;text-transform:uppercase;letter-spacing:1px;margin-top:4px;">${s.l}</div></div>`).join("")}</div>
+      ${body}
+    </div>`;
+  badge();
+  bind();
+}
+
+function updTask(id,k,v){
+  const wk={...(ST.allWeeks[String(ST.weekOff)]||EW())};
+  AREAS.forEach(a=>{wk[a]=(wk[a]||[]).map(t=>String(t.id)===String(id)?{...t,[k]:v}:t);});
+  ST.allWeeks={...ST.allWeeks,[String(ST.weekOff)]:wk};
+  queueSave();
+}
+function delTask(id){
+  const wk={...(ST.allWeeks[String(ST.weekOff)]||EW())};
+  AREAS.forEach(a=>{wk[a]=(wk[a]||[]).filter(t=>String(t.id)!==String(id));});
+  ST.allWeeks={...ST.allWeeks,[String(ST.weekOff)]:wk};
+  delete ST.openT[id]; ST.confirmDel=null;
+  queueSave(); render();
+}
+function goWeek(n){
+  const nk=String(n);
+  if(!ST.allWeeks[nk]){
+    const src=ST.allWeeks[String(ST.weekOff)]||EW(),nw={};
+    AREAS.forEach(a=>{nw[a]=(src[a]||[]).filter(t=>t.weeklyRepeat||t.status!=="Done").map(t=>({...t,hours:EH(),actualHours:"",status:t.weeklyRepeat&&t.status==="Done"?"Not Started":t.status}));});
+    ST.allWeeks={...ST.allWeeks,[nk]:nw};
+  }
+  ST.weekOff=n; render();
+}
+function addFiles(files){
+  Array.from(files).forEach(f=>{ST.resources=[...ST.resources,{id:Date.now()+Math.random(),type:"file",name:f.name,url:URL.createObjectURL(f),size:f.size,area:"All",uploadedAt:new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}),note:""}];});
+  queueSave(); render();
+}
+
+function bind(){
+  const g=id=>document.getElementById(id);
+  const q=s=>document.querySelectorAll(s);
+  g("pw")&&g("pw").addEventListener("click",()=>goWeek(ST.weekOff-1));
+  g("nw")&&g("nw").addEventListener("click",()=>goWeek(ST.weekOff+1));
+  g("ga")&&g("ga").addEventListener("click",()=>{ST.addIn=ST.fArea==="All"?"Marketing":ST.fArea;render();setTimeout(()=>{const e=g("nt");if(e)e.focus();},50);});
+  g("rfr")&&g("rfr").addEventListener("click",async()=>{
+    ST.sync="loading";badge();
+    const row=await dbLoad();
+    if(row){
+      if(row.all_weeks&&Object.keys(row.all_weeks).length)ST.allWeeks=row.all_weeks;
+      if(row.resources&&Array.isArray(row.resources))ST.resources=row.resources;
+    }
+    ST.sync="saved";render();
+  });
+  q("[data-tab]").forEach(b=>b.addEventListener("click",()=>{ST.tab=b.dataset.tab;ST.addIn=null;render();}));
+  q("[data-fa]").forEach(b=>b.addEventListener("click",()=>{ST.fArea=b.dataset.fa;render();}));
+  q("[data-fs]").forEach(b=>b.addEventListener("click",()=>{ST.fStatus=b.dataset.fs;render();}));
+  q("[data-add]").forEach(b=>b.addEventListener("click",()=>{ST.addIn=ST.addIn===b.dataset.add?null:b.dataset.add;render();setTimeout(()=>{const e=g("nt");if(e)e.focus();},50);}));
+  q("[data-tog]").forEach(b=>b.addEventListener("click",()=>{const id=b.dataset.tog;ST.openT[id]=!ST.openT[id];ST.confirmDel=null;render();}));
+  q("[data-del]").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();ST.confirmDel=b.dataset.del;render();}));
+  q("[data-dyes]").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();delTask(b.dataset.dyes);}));
+  q("[data-dno]").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();ST.confirmDel=null;render();}));
+  q("[data-tid]").forEach(el=>{
+    const ev=el.tagName==="TEXTAREA"?"input":"change";
+    el.addEventListener(ev,e=>{
+      const id=e.target.dataset.tid,f=e.target.dataset.f;
+      if(f.startsWith("hours_")){
+        const day=f.replace("hours_","");
+        const wk=ST.allWeeks[String(ST.weekOff)]||EW();
+        let task=null;AREAS.forEach(a=>{const t=(wk[a]||[]).find(t=>String(t.id)===String(id));if(t)task=t;});
+        if(task){updTask(id,"hours",{...(task.hours||EH()),[day]:e.target.value});render();}
+      }else if(f==="weeklyRepeat"){updTask(id,f,e.target.checked);render();}
+      else if(f==="notes"){updTask(id,f,e.target.value);}
+      else{updTask(id,f,e.target.value);render();}
+    });
+  });
+  g("can")&&g("can").addEventListener("click",()=>{ST.addIn=null;render();});
+  g("conf")&&g("conf").addEventListener("click",()=>{
+    const title=(g("nt")||{}).value||"";if(!title.trim())return;
+    const area=ST.addIn||"Marketing";
+    const t={id:Date.now(),title,area,owner:(g("no")||{}).value||"Gaby Speas",status:(g("ns")||{}).value||"Not Started",priority:(g("np")||{}).value||"Medium",dateAssigned:(g("nda")||{}).value||"",dateDue:(g("ndd")||{}).value||"",resources:(g("nr")||{}).value||"",notes:"",weeklyRepeat:!!(g("nrep")||{}).checked,estimatedHours:(g("ne")||{}).value||"",actualHours:"",hours:EH()};
+    const wk={...(ST.allWeeks[String(ST.weekOff)]||EW())};
+    wk[area]=[...(wk[area]||[]),t];
+    ST.allWeeks={...ST.allWeeks,[String(ST.weekOff)]:wk};
+    ST.addIn=null;queueSave();render();
+  });
+  const dz=g("dz"),fi=g("fi");
+  if(dz){dz.addEventListener("click",()=>fi&&fi.click());dz.addEventListener("dragover",e=>{e.preventDefault();dz.style.borderColor="#0770bb";dz.style.background="#eaf4fc";});dz.addEventListener("dragleave",()=>{dz.style.borderColor="#86bbd8";dz.style.background="#f8fbfe";});dz.addEventListener("drop",e=>{e.preventDefault();dz.style.borderColor="#86bbd8";dz.style.background="#f8fbfe";addFiles(e.dataTransfer.files);});}
+  if(fi)fi.addEventListener("change",e=>addFiles(e.target.files));
+  g("alb")&&g("alb").addEventListener("click",()=>{
+    const ls=g("ls");
+    ls.innerHTML=`<div style="background:#fff;border:1px solid #d0e0ec;border-radius:8px;padding:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;"><div style="flex:1;min-width:160px;"><label class="fl">URL<input class="fi" id="lu" style="margin-top:3px;" placeholder="https://..."></label></div><div style="flex:1;min-width:160px;"><label class="fl">Label (optional)<input class="fi" id="ll" style="margin-top:3px;" placeholder="e.g. Brand guidelines"></label></div><div style="display:flex;gap:8px;"><button id="cl" style="background:none;border:1px solid #d0e0ec;border-radius:4px;padding:7px 12px;font-size:12px;cursor:pointer;color:#5a7a99;">Cancel</button><button id="al2" style="background:#0770bb;color:#fff;border:none;border-radius:4px;padding:7px 12px;font-size:12px;font-weight:500;cursor:pointer;">Add</button></div></div>`;
+    g("cl")&&g("cl").addEventListener("click",()=>render());
+    g("al2")&&g("al2").addEventListener("click",()=>{
+      const url=(g("lu")||{}).value||"";if(!url.trim())return;
+      const label=(g("ll")||{}).value||url;
+      ST.resources=[...ST.resources,{id:Date.now(),type:"link",name:label,url:url.startsWith("http")?url:"https://"+url,area:"All",uploadedAt:new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}),note:""}];
+      queueSave();render();
+    });
+    setTimeout(()=>{const e=g("lu");if(e)e.focus();},50);
+  });
+  q("[data-dres]").forEach(b=>b.addEventListener("click",()=>{ST.resources=ST.resources.filter(r=>String(r.id)!==String(b.dataset.dres));queueSave();render();}));
+  q(".rn").forEach(el=>el.addEventListener("input",e=>{const r=ST.resources.find(x=>String(x.id)===String(e.target.dataset.rid));if(r){r.note=e.target.value;queueSave();}}));
+  q(".ra").forEach(el=>el.addEventListener("change",e=>{const r=ST.resources.find(x=>String(x.id)===String(e.target.dataset.rid));if(r){r.area=e.target.value;queueSave();render();}}));
+}
+
+// ── Boot ─────────────────────────────────────────────────────────
+render();
+dbLoad().then(row=>{
+  if(row){
+    if(row.all_weeks&&Object.keys(row.all_weeks).length)ST.allWeeks=row.all_weeks;
+    if(row.resources&&Array.isArray(row.resources))ST.resources=row.resources;
+  }
+  ST.sync="saved";render();
+}).catch(()=>{ST.sync="error";badge();});
+</script>
+</body>
+</html>
