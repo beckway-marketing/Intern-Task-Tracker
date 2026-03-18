@@ -38,16 +38,13 @@ input,select,textarea,button{font-family:inherit;}
 <body>
 <div id="app"></div>
 <script>
-// ── Supabase ─────────────────────────────────────────────────────
-const SB_URL="https://rxmttzodgwfkryibcyhw.supabase.co";
-const SB_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4bXR0em9kZ3dma3J5aWJjeWh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3NzAwOTgsImV4cCI6MjA4OTM0NjA5OH0.8u8LyK3-Fuc6i7VQb6qH9L1xl4L8WitcIVPd4LI67Yo";
-const HDR={"apikey":SB_KEY,"Authorization":"Bearer "+SB_KEY,"Content-Type":"application/json","Prefer":"resolution=merge-duplicates"};
+const SB_URL="https://jiojyzdrdqbdevpkdugb.supabase.co";
+const SB_KEY="sb_publishable_TYFKte-HdETWB9P9iT34zw_f6cQazqx";
+const HDR={"apikey":SB_KEY,"Authorization":"Bearer "+SB_KEY,"Content-Type":"application/json"};
 
 async function dbLoad(){
   try{
-    const r=await fetch(SB_URL+"/rest/v1/tracker_data?id=eq.main&select=all_weeks,resources",{
-      headers:{"apikey":SB_KEY,"Authorization":"Bearer "+SB_KEY}
-    });
+    const r=await fetch(SB_URL+"/rest/v1/tracker_data?id=eq.main&select=all_weeks,resources",{headers:HDR});
     if(!r.ok){console.error("Load error",r.status,await r.text());return null;}
     const d=await r.json();
     return d[0]||null;
@@ -56,21 +53,15 @@ async function dbLoad(){
 
 async function dbSave(all_weeks,resources){
   try{
-    // Use upsert — works whether row exists or not
     const r=await fetch(SB_URL+"/rest/v1/tracker_data",{
       method:"POST",
       headers:{...HDR,"Prefer":"resolution=merge-duplicates,return=minimal"},
       body:JSON.stringify({id:"main",all_weeks,resources,updated_at:new Date().toISOString()})
     });
-    if(!r.ok){
-      const txt=await r.text();
-      console.error("Save error",r.status,txt);
-      ST.sync="error"; badge();
-    }
+    if(!r.ok){console.error("Save error",r.status,await r.text());ST.sync="error";badge();}
   }catch(e){console.error("Save failed",e);ST.sync="error";badge();}
 }
 
-// ── Constants ────────────────────────────────────────────────────
 const AREAS=["Marketing","Business Development","Social Media","Offsites"];
 const AC={"Marketing":{c:"#f9731a",lt:"#fff4ec",bd:"#f9731a",tx:"#7a2e00"},"Business Development":{c:"#044066",lt:"#e6f0f8",bd:"#044066",tx:"#044066"},"Social Media":{c:"#0770bb",lt:"#eaf4fc",bd:"#0770bb",tx:"#034f8a"},"Offsites":{c:"#2fa878",lt:"#eafaf4",bd:"#2fa878",tx:"#1a6b4a"}};
 const SC={"Not Started":{bg:"#f0f4f8",tx:"#4a6a8a",bd:"#b0c8d8"},"In Progress":{bg:"#e6f0f8",tx:"#044066",bd:"#86bbd8"},"Blocked":{bg:"#fff0e8",tx:"#7a2e00",bd:"#f9731a"},"Review":{bg:"#fffbe6",tx:"#6a5000",bd:"#ffc533"},"Done":{bg:"#eafaf4",tx:"#1a6b4a",bd:"#2fa878"}};
@@ -84,31 +75,25 @@ const EW=()=>Object.fromEntries(AREAS.map(a=>[a,[]]));
 function wkLabel(o){const b=new Date("2026-03-16");b.setDate(b.getDate()+o*7);const e=new Date(b);e.setDate(e.getDate()+4);const f=d=>d.toLocaleDateString("en-US",{month:"short",day:"numeric"});return f(b)+" \u2013 "+f(e);}
 function wkDates(o){return DAYS.map((_,i)=>{const d=new Date("2026-03-16");d.setDate(d.getDate()+o*7+i);return d.toLocaleDateString("en-US",{month:"short",day:"numeric"});});}
 
-// ── State ────────────────────────────────────────────────────────
 let ST={weekOff:0,allWeeks:{"0":EW()},resources:[],tab:"tasks",fArea:"All",fStatus:"All",addIn:null,openT:{},confirmDel:null,sync:"loading"};
 let saveTimer=null;
 
 function queueSave(){
-  ST.sync="saving"; badge();
+  ST.sync="saving";badge();
   clearTimeout(saveTimer);
   saveTimer=setTimeout(async()=>{
     await dbSave(ST.allWeeks,ST.resources);
-    if(ST.sync!=="error"){ST.sync="saved"; badge();}
+    if(ST.sync!=="error"){ST.sync="saved";badge();}
   },1000);
 }
 
 function badge(){
   const el=document.getElementById("sb");
   if(!el)return;
-  const m={
-    loading:["#86bbd8","Loading data..."],
-    saving:["#ffc533","Saving..."],
-    saved:["#2fa878","\u2713 Saved \u2014 live for all users"],
-    error:["#f9731a","\u26a0 Save error \u2014 check console"]
-  };
-  const[color,text]=m[ST.sync]||m.saved;
-  el.innerHTML=`<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color};margin-right:5px;vertical-align:middle;"></span>${text}`;
-  el.style.color=color;
+  const m={loading:["#86bbd8","Loading..."],saving:["#ffc533","Saving..."],saved:["#2fa878","\u2713 Saved \u2014 live for all users"],error:["#f9731a","\u26a0 Save error"]};
+  const[col,txt]=m[ST.sync]||m.saved;
+  el.innerHTML=`<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${col};margin-right:5px;vertical-align:middle;"></span>${txt}`;
+  el.style.color=col;
 }
 
 const pill=(l,c)=>`<span class="pill" style="background:${c.bg};color:${c.tx};border:1px solid ${c.bd};">${l}</span>`;
@@ -246,7 +231,6 @@ function render(){
   const te=tasks.reduce((s,t)=>s+(parseFloat(t.estimatedHours)||0),0);
   const cn=SO.reduce((a,s)=>({...a,[s]:tasks.filter(t=>t.status===s).length}),{});
   const stats=[{l:"Total tasks",v:tasks.length,acc:"#044066"},{l:"In progress",v:cn["In Progress"],acc:"#0770bb"},{l:"Done",v:cn["Done"],acc:"#2fa878"},{l:"Blocked",v:cn["Blocked"],acc:"#f9731a"},{l:"Hours logged",v:ta+"h"+(te>0?" / "+te+"h est":""),acc:"#ffa343"}];
-
   let body="";
   if(ST.tab==="tasks"){
     body=filHtml()+`<div style="display:grid;grid-template-columns:1.6fr 1fr .7fr .8fr 1fr .9fr 44px;gap:12px;padding:4px 18px;font-size:10px;font-weight:500;color:#86bbd8;text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px;"><div>Task</div><div>Status</div><div>Priority</div><div>Owner</div><div>Due date</div><div>Actual / Est.</div><div></div></div>`+
@@ -288,8 +272,7 @@ function render(){
       <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px;">${stats.map(s=>`<div class="stat-card" style="border-top:3px solid ${s.acc};"><div style="font-size:22px;font-weight:500;color:#1a2e40;line-height:1.1;">${s.v}</div><div style="font-size:10px;font-weight:500;color:#86bbd8;text-transform:uppercase;letter-spacing:1px;margin-top:4px;">${s.l}</div></div>`).join("")}</div>
       ${body}
     </div>`;
-  badge();
-  bind();
+  badge();bind();
 }
 
 function updTask(id,k,v){
@@ -302,8 +285,8 @@ function delTask(id){
   const wk={...(ST.allWeeks[String(ST.weekOff)]||EW())};
   AREAS.forEach(a=>{wk[a]=(wk[a]||[]).filter(t=>String(t.id)!==String(id));});
   ST.allWeeks={...ST.allWeeks,[String(ST.weekOff)]:wk};
-  delete ST.openT[id]; ST.confirmDel=null;
-  queueSave(); render();
+  delete ST.openT[id];ST.confirmDel=null;
+  queueSave();render();
 }
 function goWeek(n){
   const nk=String(n);
@@ -312,11 +295,11 @@ function goWeek(n){
     AREAS.forEach(a=>{nw[a]=(src[a]||[]).filter(t=>t.weeklyRepeat||t.status!=="Done").map(t=>({...t,hours:EH(),actualHours:"",status:t.weeklyRepeat&&t.status==="Done"?"Not Started":t.status}));});
     ST.allWeeks={...ST.allWeeks,[nk]:nw};
   }
-  ST.weekOff=n; render();
+  ST.weekOff=n;render();
 }
 function addFiles(files){
   Array.from(files).forEach(f=>{ST.resources=[...ST.resources,{id:Date.now()+Math.random(),type:"file",name:f.name,url:URL.createObjectURL(f),size:f.size,area:"All",uploadedAt:new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}),note:""}];});
-  queueSave(); render();
+  queueSave();render();
 }
 
 function bind(){
@@ -325,15 +308,7 @@ function bind(){
   g("pw")&&g("pw").addEventListener("click",()=>goWeek(ST.weekOff-1));
   g("nw")&&g("nw").addEventListener("click",()=>goWeek(ST.weekOff+1));
   g("ga")&&g("ga").addEventListener("click",()=>{ST.addIn=ST.fArea==="All"?"Marketing":ST.fArea;render();setTimeout(()=>{const e=g("nt");if(e)e.focus();},50);});
-  g("rfr")&&g("rfr").addEventListener("click",async()=>{
-    ST.sync="loading";badge();
-    const row=await dbLoad();
-    if(row){
-      if(row.all_weeks&&Object.keys(row.all_weeks).length)ST.allWeeks=row.all_weeks;
-      if(row.resources&&Array.isArray(row.resources))ST.resources=row.resources;
-    }
-    ST.sync="saved";render();
-  });
+  g("rfr")&&g("rfr").addEventListener("click",async()=>{ST.sync="loading";badge();const row=await dbLoad();if(row){if(row.all_weeks&&Object.keys(row.all_weeks).length)ST.allWeeks=row.all_weeks;if(row.resources&&Array.isArray(row.resources))ST.resources=row.resources;}ST.sync="saved";render();});
   q("[data-tab]").forEach(b=>b.addEventListener("click",()=>{ST.tab=b.dataset.tab;ST.addIn=null;render();}));
   q("[data-fa]").forEach(b=>b.addEventListener("click",()=>{ST.fArea=b.dataset.fa;render();}));
   q("[data-fs]").forEach(b=>b.addEventListener("click",()=>{ST.fStatus=b.dataset.fs;render();}));
@@ -346,12 +321,8 @@ function bind(){
     const ev=el.tagName==="TEXTAREA"?"input":"change";
     el.addEventListener(ev,e=>{
       const id=e.target.dataset.tid,f=e.target.dataset.f;
-      if(f.startsWith("hours_")){
-        const day=f.replace("hours_","");
-        const wk=ST.allWeeks[String(ST.weekOff)]||EW();
-        let task=null;AREAS.forEach(a=>{const t=(wk[a]||[]).find(t=>String(t.id)===String(id));if(t)task=t;});
-        if(task){updTask(id,"hours",{...(task.hours||EH()),[day]:e.target.value});render();}
-      }else if(f==="weeklyRepeat"){updTask(id,f,e.target.checked);render();}
+      if(f.startsWith("hours_")){const day=f.replace("hours_","");const wk=ST.allWeeks[String(ST.weekOff)]||EW();let task=null;AREAS.forEach(a=>{const t=(wk[a]||[]).find(t=>String(t.id)===String(id));if(t)task=t;});if(task){updTask(id,"hours",{...(task.hours||EH()),[day]:e.target.value});render();}}
+      else if(f==="weeklyRepeat"){updTask(id,f,e.target.checked);render();}
       else if(f==="notes"){updTask(id,f,e.target.value);}
       else{updTask(id,f,e.target.value);render();}
     });
@@ -373,12 +344,7 @@ function bind(){
     const ls=g("ls");
     ls.innerHTML=`<div style="background:#fff;border:1px solid #d0e0ec;border-radius:8px;padding:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;"><div style="flex:1;min-width:160px;"><label class="fl">URL<input class="fi" id="lu" style="margin-top:3px;" placeholder="https://..."></label></div><div style="flex:1;min-width:160px;"><label class="fl">Label (optional)<input class="fi" id="ll" style="margin-top:3px;" placeholder="e.g. Brand guidelines"></label></div><div style="display:flex;gap:8px;"><button id="cl" style="background:none;border:1px solid #d0e0ec;border-radius:4px;padding:7px 12px;font-size:12px;cursor:pointer;color:#5a7a99;">Cancel</button><button id="al2" style="background:#0770bb;color:#fff;border:none;border-radius:4px;padding:7px 12px;font-size:12px;font-weight:500;cursor:pointer;">Add</button></div></div>`;
     g("cl")&&g("cl").addEventListener("click",()=>render());
-    g("al2")&&g("al2").addEventListener("click",()=>{
-      const url=(g("lu")||{}).value||"";if(!url.trim())return;
-      const label=(g("ll")||{}).value||url;
-      ST.resources=[...ST.resources,{id:Date.now(),type:"link",name:label,url:url.startsWith("http")?url:"https://"+url,area:"All",uploadedAt:new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}),note:""}];
-      queueSave();render();
-    });
+    g("al2")&&g("al2").addEventListener("click",()=>{const url=(g("lu")||{}).value||"";if(!url.trim())return;const label=(g("ll")||{}).value||url;ST.resources=[...ST.resources,{id:Date.now(),type:"link",name:label,url:url.startsWith("http")?url:"https://"+url,area:"All",uploadedAt:new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}),note:""}];queueSave();render();});
     setTimeout(()=>{const e=g("lu");if(e)e.focus();},50);
   });
   q("[data-dres]").forEach(b=>b.addEventListener("click",()=>{ST.resources=ST.resources.filter(r=>String(r.id)!==String(b.dataset.dres));queueSave();render();}));
@@ -386,7 +352,6 @@ function bind(){
   q(".ra").forEach(el=>el.addEventListener("change",e=>{const r=ST.resources.find(x=>String(x.id)===String(e.target.dataset.rid));if(r){r.area=e.target.value;queueSave();render();}}));
 }
 
-// ── Boot ─────────────────────────────────────────────────────────
 render();
 dbLoad().then(row=>{
   if(row){
